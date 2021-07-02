@@ -40,7 +40,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = (db) => {
     app.get('/health', (req, res) => {
-        console.log('aaa');
         res.send('Healthy');
     });
 
@@ -112,7 +111,23 @@ module.exports = (db) => {
     });
 
     app.get('/rides', (req, res) => {
-        db.all('SELECT * FROM Rides', function (err, rows) {
+        const page = Number(req.query.page);
+        const pageSize = Number(req.query.pageSize);
+        let limit = '';
+
+        if (page) {
+            if (Number.isNaN(page) || Number.isNaN(pageSize)) {
+                return res.send({
+                    error_code: 'VALIDATION_ERROR',
+                    message: 'page and pageSize must be number'
+                });
+            }
+
+            const offset = (page - 1) * pageSize;
+            limit = `limit ${pageSize} offset ${offset}`;
+        }
+
+        db.all(`SELECT * FROM Rides ${limit}`, function (err, rows) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
@@ -153,8 +168,3 @@ module.exports = (db) => {
 
     return app;
 };
-
-// Override the base console log with winston
-console.log = function() {
-    return logger.info.apply(logger, arguments)
-}
