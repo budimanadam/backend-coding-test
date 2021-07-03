@@ -39,11 +39,59 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 module.exports = (db) => {
+    // eslint-disable-next-line func-style
+    function getAll (query) {
+        return new Promise(function (resolve, reject) {
+            db.all(query, function (err, rows) {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(rows);
+            });
+        });
+    }
+
+    // eslint-disable-next-line func-style
+    function selectLastId (query) {
+        return new Promise(function (resolve, reject) {
+            db.get(query, function (err, rows) {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(rows);
+            });
+        });
+    }
+
+    // eslint-disable-next-line func-style
+    function insertRide (query, values) {
+        return new Promise(function (resolve, reject) {
+            db.run(query, values, function (err, rows) {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(rows);
+            });
+        });
+    }
+
+    // eslint-disable-next-line func-style
+    function getSingleRide (query) {
+        return new Promise(function (resolve, reject) {
+            db.get(query, function (err, rows) {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(rows);
+            });
+        });
+    }
+
     app.get('/health', (req, res) => {
         res.send('Healthy');
     });
 
-    app.post('/rides', jsonParser, (req, res) => {
+    app.post('/rides', jsonParser, async (req, res) => {
         const startLatitude = Number(req.body.start_lat);
         const startLongitude = Number(req.body.start_long);
         const endLatitude = Number(req.body.end_lat);
@@ -89,28 +137,18 @@ module.exports = (db) => {
 
         var values = [req.body.start_lat, req.body.start_long, req.body.end_lat, req.body.end_long, req.body.rider_name, req.body.driver_name, req.body.driver_vehicle];
         
-        const result = db.run('INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)', values, function (err) {
-            if (err) {
-                return res.send({
-                    error_code: 'SERVER_ERROR',
-                    message: 'Unknown error'
-                });
-            }
-
-            db.all('SELECT * FROM Rides WHERE rideID = ?', this.lastID, function (err, rows) {
-                if (err) {
-                    return res.send({
-                        error_code: 'SERVER_ERROR',
-                        message: 'Unknown error'
-                    });
-                }
-
-                res.send(rows);
-            });
-        });
+        const sql = 'INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        const result = await insertRide(sql, values);
+        const select = await selectLastId("SELECT last_insert_rowid() as rideID");
+        const responseObject = {
+            rideID: select.rideID,
+            ...req.body
+        };
+        const response = [responseObject];
+        res.send(response);
     });
 
-    app.get('/rides', (req, res) => {
+    app.get('/rides', async (req, res) => {
         const page = Number(req.query.page);
         const pageSize = Number(req.query.pageSize);
         let limit = '';
@@ -126,43 +164,28 @@ module.exports = (db) => {
             const offset = (page - 1) * pageSize;
             limit = `limit ${pageSize} offset ${offset}`;
         }
-
-        db.all(`SELECT * FROM Rides ${limit}`, function (err, rows) {
-            if (err) {
-                return res.send({
-                    error_code: 'SERVER_ERROR',
-                    message: 'Unknown error'
-                });
-            }
-
-            if (rows.length === 0) {
-                return res.send({
-                    error_code: 'RIDES_NOT_FOUND_ERROR',
-                    message: 'Could not find any rides'
-                });
-            }
-
-            res.send(rows);
-        });
+        const rows = await getAll(`select * from Rides ${limit}`);
+        if (rows.length === 0) {
+            res.send({
+                error_code: 'RIDES_NOT_FOUND_ERROR',
+                message: 'Could not find any rides'
+            });
+        }
+        res.send(rows);
     });
 
-    app.get('/rides/:id', (req, res) => {
-        db.all(`SELECT * FROM Rides WHERE rideID='${req.params.id}'`, function (err, rows) {
-            if (err) {
-                return res.send({
-                    error_code: 'SERVER_ERROR',
-                    message: 'Unknown error'
-                });
-            }
+    app.get('/rides/:id', async (req, res) => {
+        if (Number.isNaN(req.params.id)) {
+            return res.send({
+                error_code: 'VALIDATION_ERROR',
+                message: 'Id must be number'
+            });
+        }
 
-            if (rows.length === 0) {
-                return res.send({
-                    error_code: 'RIDES_NOT_FOUND_ERROR',
-                    message: 'Could not find any rides'
-                });
-            }
-
-            res.send(rows);
+        const result = await getSingleRide(`SELECT * FROM Rides WHERE rideID='${req.params.id}'`);
+        res.send(result || {
+            error_code: 'RIDES_NOT_FOUND_ERROR',
+            message: 'Could not find any rides'
         });
     });
 
