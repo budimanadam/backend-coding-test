@@ -1,0 +1,11 @@
+config:
+  target: "http://localhost:8010"
+  phases:
+    - duration: 60
+      arrivalRate: 25
+
+scenarios:
+  - name: "Get all Rides"
+    flow:
+      - get:
+          url: "/rides"
